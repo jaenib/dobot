@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
+
 from typing import List, Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func, Index
@@ -50,6 +51,7 @@ class User(Base):
     level: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
+
     tasks: Mapped[List["Task"]] = relationship("Task", back_populates="user", cascade="all, delete-orphan")
     rewards: Mapped[List["Reward"]] = relationship("Reward", back_populates="user", cascade="all, delete-orphan")
     setting: Mapped[Optional["Setting"]] = relationship(
@@ -64,6 +66,7 @@ class Domain(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True)
     weight_bias: Mapped[float] = mapped_column(Float, default=1.0)
 
+
     tasks: Mapped[List["Task"]] = relationship("Task", back_populates="domain")
 
 
@@ -76,6 +79,7 @@ class Task(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(255))
+
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     time_horizon: Mapped[TimeHorizon] = mapped_column(Enum(TimeHorizon), default=TimeHorizon.SHORT)
     energy: Mapped[EnergyLevel] = mapped_column(Enum(EnergyLevel), default=EnergyLevel.MEDIUM)

@@ -4,7 +4,6 @@ from typing import Iterable, List
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-
 def chunked(iterable: Iterable[InlineKeyboardButton], size: int) -> List[List[InlineKeyboardButton]]:
     row: List[InlineKeyboardButton] = []
     result: List[List[InlineKeyboardButton]] = []
