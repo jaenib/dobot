@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Bot, Update
 from zoneinfo import ZoneInfo
 from telegram.ext import (
     AIORateLimiter,
@@ -25,7 +25,7 @@ from . import db, keyboards, scoring, views
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-ADD_TITLE, ADD_DOMAIN, ADD_HORIZON, ADD_ENERGY, ADD_PRIORITY, ADD_WEIGHT, ADD_RECURRENCE, ADD_CUSTOM, ADD_DUE, ADD_CONFIRM = range(9)
+ADD_TITLE, ADD_DOMAIN, ADD_HORIZON, ADD_ENERGY, ADD_PRIORITY, ADD_WEIGHT, ADD_RECURRENCE, ADD_CUSTOM, ADD_DUE, ADD_CONFIRM = range(10)
 ADD_CHECK_TITLE, ADD_CHECK_DOMAIN = range(2)
 
 
@@ -676,7 +676,7 @@ async def task_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
 
-async def digest_tick(application: Application) -> None:
+async def digest_tick(bot: Bot) -> None:
     users = await run_db(db.list_users)
     now_utc = datetime.utcnow()
     for user in users:
@@ -693,7 +693,7 @@ async def digest_tick(application: Application) -> None:
             due = await run_db(db.due_today_tasks, user["id"], now_utc.isoformat())
             picks = await run_db(db.neglected_candidates, user["id"], None, 3)
             text = views.render_today([dict(r) for r in overdue][:5], [dict(r) for r in due][:5], [dict(r) for r in picks][:5])
-            await application.bot.send_message(chat_id, text)
+            await bot.send_message(chat_id, text)
             await run_db(db.update_user, user["id"], last_daily_digest=local_now.date().isoformat())
         if local_now.weekday() == 6 and local_now.hour == 18 and local_now.minute < 5:
             week_ref = f"{local_now.isocalendar()[0]}-{local_now.isocalendar()[1]}"
@@ -702,17 +702,15 @@ async def digest_tick(application: Application) -> None:
             chat_id = user["telegram_id"]
             snapshot = await run_db(db.stats_snapshot, user["id"], 7)
             text = "Weekly recap\n" + views.render_stats(snapshot, 7)
-            await application.bot.send_message(chat_id, text)
+            await bot.send_message(chat_id, text)
             await run_db(db.update_user, user["id"], last_weekly_digest=week_ref)
 
 
-async def scheduler_task(application: Application) -> None:
-    while True:
-        try:
-            await digest_tick(application)
-        except Exception as exc:
-            log.exception("digest tick failed: %s", exc)
-        await asyncio.sleep(300)
+async def digest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        await digest_tick(context.bot)
+    except Exception as exc:
+        log.exception("digest tick failed: %s", exc)
 
 
 def build_application(token: str) -> Application:
@@ -769,18 +767,13 @@ def build_application(token: str) -> Application:
     return application
 
 
-async def main() -> None:
+def main() -> None:
     token = load_env()
-    await run_db(db.init_db)
+    db.init_db()
     application = build_application(token)
-    await application.initialize()
-    application.create_task(scheduler_task(application))
-    await application.start()
-    await application.updater.start_polling()
-    await application.updater.wait()
-    await application.stop()
-    await application.shutdown()
+    application.job_queue.run_repeating(digest_job, interval=300, first=0)
+    application.run_polling()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
